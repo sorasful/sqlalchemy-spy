@@ -1,0 +1,33 @@
+[project]
+name = "sqlalchemy-profiler"
+version = "0.1.0"
+description = "Minimal SQLAlchemy query profiler - zero dependencies beyond SQLAlchemy"
+readme = "README.md"
+authors = [
+    { name = "sorasful", email = "teva.krief@hotmail.fr" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "sqlalchemy>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "fastapi>=0.110",
+    "pytest-cov>=7.1.0",
+    "pre-commit>=4.0",
+    "ty>=0.0.29",
+    "aiosqlite>=0.22.1",
+    "greenlet>=3.4.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = "--cov=sqlalchemy_profiler --cov-report=term-missing"
+
+[build-system]
+requires = ["uv_build>=0.10.6,<0.11.0"]
+build-backend = "uv_build"
