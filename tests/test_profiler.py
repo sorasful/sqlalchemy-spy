@@ -2,8 +2,8 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from sqlalchemy_profiler import Profiler
-from sqlalchemy_profiler.profiler import QueryRecord
+from sqlalchemy_spy import Profiler
+from sqlalchemy_spy.profiler import QueryRecord
 
 
 class TestQueryRecord:

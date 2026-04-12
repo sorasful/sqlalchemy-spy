@@ -1,7 +1,7 @@
 import json
 
 
-from sqlalchemy_profiler import JsonRenderer
+from sqlalchemy_spy import JsonRenderer
 
 
 class TestJsonRendererStructure:

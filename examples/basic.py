@@ -6,7 +6,7 @@ Run: uv run examples/basic.py
 from sqlalchemy import Integer, String, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
-from sqlalchemy_profiler import Profiler
+from sqlalchemy_spy import Profiler
 
 
 class Base(DeclarativeBase):

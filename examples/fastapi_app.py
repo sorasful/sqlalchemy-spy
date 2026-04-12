@@ -29,7 +29,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from sqlalchemy_profiler import Profiler
+from sqlalchemy_spy import Profiler
 
 
 engine = create_engine("sqlite:///example.db", echo=False)
@@ -102,7 +102,7 @@ class SQLAlchemyProfilerMiddleware(BaseHTTPMiddleware):
         return response
 
 
-app = FastAPI(title="sqlalchemy-profiler demo")
+app = FastAPI(title="sqlalchemy-spy demo")
 app.add_middleware(SQLAlchemyProfilerMiddleware, slow_threshold_ms=0)
 
 

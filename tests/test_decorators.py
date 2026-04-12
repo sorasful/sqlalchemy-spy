@@ -1,7 +1,7 @@
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from sqlalchemy_profiler import profile
+from sqlalchemy_spy import profile
 
 
 class TestProfileDecorator:

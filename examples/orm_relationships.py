@@ -12,7 +12,7 @@ from sqlalchemy.orm import (
     relationship,
 )
 
-from sqlalchemy_profiler import Profiler
+from sqlalchemy_spy import Profiler
 
 
 class Base(DeclarativeBase):

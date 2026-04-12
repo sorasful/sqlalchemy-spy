@@ -8,7 +8,7 @@ import asyncio
 from sqlalchemy import Integer, String, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
-from sqlalchemy_profiler import profile
+from sqlalchemy_spy import profile
 
 
 class Base(DeclarativeBase):

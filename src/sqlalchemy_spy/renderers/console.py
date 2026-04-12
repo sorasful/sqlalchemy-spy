@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from sqlalchemy_profiler.profiler import Profiler, QueryRecord
+    from sqlalchemy_spy.profiler import Profiler, QueryRecord
 
 RESET = "\033[0m"
 BOLD = "\033[1m"

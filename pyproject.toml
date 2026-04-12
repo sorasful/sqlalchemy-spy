@@ -1,5 +1,5 @@
 [project]
-name = "sqlalchemy-profiler"
+name = "sqlalchemy-spy"
 version = "0.1.0"
 description = "Minimal SQLAlchemy query profiler - zero dependencies beyond SQLAlchemy"
 readme = "README.md"
@@ -26,7 +26,7 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "--cov=sqlalchemy_profiler --cov-report=term-missing"
+addopts = "--cov=sqlalchemy_spy --cov-report=term-missing"
 
 [build-system]
 requires = ["uv_build>=0.10.6,<0.11.0"]

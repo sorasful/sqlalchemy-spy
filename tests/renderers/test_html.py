@@ -1,4 +1,4 @@
-from sqlalchemy_profiler import HtmlRenderer
+from sqlalchemy_spy import HtmlRenderer
 
 
 class TestHtmlRendererStructure:

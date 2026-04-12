@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from sqlalchemy_profiler import Profiler
+from sqlalchemy_spy import Profiler
 
 
 @pytest.fixture

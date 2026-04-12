@@ -1,4 +1,4 @@
-from sqlalchemy_profiler import ConsoleRenderer
+from sqlalchemy_spy import ConsoleRenderer
 
 
 class TestConsoleRendererHeader:

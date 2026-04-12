@@ -1,4 +1,4 @@
-# sqlalchemy-profiler
+# sqlalchemy-spy
 
 A small local profiler for SQLAlchemy queries. It uses the same event-based mechanism that OpenTelemetry's SQLAlchemy instrumentation (and tools like Logfire) use under the hood - `before_cursor_execute`, `after_cursor_execute`, `handle_error` - but outputs everything locally with no backend required.
 
@@ -41,9 +41,9 @@ The hot paths sections are handy for spotting N+1 patterns: seeing `routes/users
 ## Install
 
 ```bash
-uv add sqlalchemy-profiler
+uv add sqlalchemy-spy
 # or
-pip install sqlalchemy-profiler
+pip install sqlalchemy-spy
 ```
 
 ## Usage
@@ -51,7 +51,7 @@ pip install sqlalchemy-profiler
 ### Context manager
 
 ```python
-from sqlalchemy_profiler import Profiler
+from sqlalchemy_spy import Profiler
 
 with Profiler() as prof:
     with Session(engine) as session:
@@ -82,7 +82,7 @@ with Profiler(async_engine) as prof:
 Works on sync and async functions:
 
 ```python
-from sqlalchemy_profiler import profile
+from sqlalchemy_spy import profile
 
 @profile()
 def load_dashboard():
@@ -120,7 +120,7 @@ Each `QueryRecord` has:
 ### FastAPI middleware
 
 ```python
-from sqlalchemy_profiler import Profiler
+from sqlalchemy_spy import Profiler
 from starlette.middleware.base import BaseHTTPMiddleware
 
 class SQLAlchemyProfilerMiddleware(BaseHTTPMiddleware):
@@ -141,7 +141,7 @@ See [`examples/fastapi_app.py`](examples/fastapi_app.py) for a working example w
 ### Console
 
 ```python
-from sqlalchemy_profiler import ConsoleRenderer
+from sqlalchemy_spy import ConsoleRenderer
 
 ConsoleRenderer(
     top_slow=5,          # N slowest queries (default: 5)
@@ -159,7 +159,7 @@ prof.print_stats(top_slow=10, show_callsites=False)
 Produces a self-contained HTML file - CSS and JS are inlined, no external dependencies.
 
 ```python
-from sqlalchemy_profiler import HtmlRenderer
+from sqlalchemy_spy import HtmlRenderer
 
 HtmlRenderer().open(prof)                 # write to a temp file and open in the browser
 HtmlRenderer().save(prof, "report.html")  # write to a specific path
@@ -171,7 +171,7 @@ The page has a sortable query table (click any column header), per-row expansion
 ### JSON
 
 ```python
-from sqlalchemy_profiler import JsonRenderer
+from sqlalchemy_spy import JsonRenderer
 
 JsonRenderer().render(prof)              # → JSON string
 JsonRenderer().print(prof)              # print to stdout

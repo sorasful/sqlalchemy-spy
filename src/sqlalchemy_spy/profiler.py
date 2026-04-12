@@ -13,7 +13,7 @@ from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from sqlalchemy_profiler.renderers.base import BaseRender
+from sqlalchemy_spy.renderers.base import BaseRender
 
 # Path to the installed SQLAlchemy package - used to filter out internal frames
 _SA_PATH = str(Path(sqlalchemy.__file__).parent)
@@ -108,7 +108,7 @@ class Profiler:
                 and not f.filename.startswith(
                     "<"
                 )  # dynamic frames (<string>, <frozen …>)
-                and "sqlalchemy_profiler" not in f.filename
+                and "sqlalchemy_spy" not in f.filename
             ][-self.stack_depth :]
 
         record = QueryRecord(
@@ -146,7 +146,7 @@ class Profiler:
         **kwargs: Any,
     ) -> None:
         """Print a console report. Shortcut for ConsoleRenderer().render(profiler)."""
-        from sqlalchemy_profiler import ConsoleRenderer
+        from sqlalchemy_spy import ConsoleRenderer
 
         renderer = renderer if renderer is not None else ConsoleRenderer
         renderer(**kwargs).render(self)
