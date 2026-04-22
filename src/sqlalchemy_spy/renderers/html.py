@@ -97,7 +97,6 @@ def _classify_plan(plan: list[str]) -> tuple[str, str]:
             "SCAN" in upper and "INDEX" not in upper and "USING" not in upper
         ) or "SEQ SCAN" in upper
         if is_index_line:
-            # Composite = multiple column predicates inside the parentheses
             paren = line[line.index("(") :] if "(" in line else ""
             if " AND " in paren.upper():
                 return "composite-index", "Composite Index"
@@ -107,6 +106,15 @@ def _classify_plan(plan: list[str]) -> tuple[str, str]:
     if has_index:
         return "index", "Index"
     return "plan", "Plan"
+
+
+# Numeric sort keys — lower = more problematic, sorts first ascending
+_PLAN_SORT: dict[str, str] = {
+    "full-scan": "1",
+    "index": "2",
+    "composite-index": "3",
+    "plan": "4",
+}
 
 
 def _fmt_explain(plan: list[str] | None, plan_id: str = "x") -> str:
@@ -302,6 +310,7 @@ _TEMPLATE = """\
 <th class="sortable asc" data-sort="started">Started<span class="sort-ind"></span></th>
 <th class="sortable" data-sort="dur">Duration<span class="sort-ind"></span></th>
 <th class="sortable" data-sort="op">Op<span class="sort-ind"></span></th>
+{plan_hdr}
 <th>SQL</th>
 <th class="sortable" data-sort="cs">Call site<span class="sort-ind"></span></th>
 </tr></thead>
@@ -323,6 +332,13 @@ class HtmlRenderer:
         total = profiler.total_time_ms
         max_ms = max((q.duration_ms for q in queries), default=0.0)
         first_started = queries[0].started_at if queries else 0.0
+        has_plans = any(q.explain_plan is not None for q in queries)
+        colspan = 7 if has_plans else 6
+        plan_hdr = (
+            '<th class="sortable" data-sort="plan">Plan<span class="sort-ind"></span></th>'
+            if has_plans
+            else ""
+        )
 
         return _TEMPLATE.format(
             query_count=n,
@@ -331,8 +347,9 @@ class HtmlRenderer:
             js=_JS,
             header=self._header(n, total, max_ms),
             filters=self._filters(queries),
-            rows=self._rows(queries, max_ms, first_started),
+            rows=self._rows(queries, max_ms, first_started, has_plans, colspan),
             hot_paths=self._hot_paths(queries),
+            plan_hdr=plan_hdr,
         )
 
     def save(self, profiler: "Profiler", path: "str | Path") -> Path:
@@ -382,12 +399,28 @@ class HtmlRenderer:
             )
         return f'<div class="filters">{"".join(btns)}</div>'
 
-    def _rows(self, queries: list, max_ms: float, first_started: float) -> str:
+    def _rows(
+        self,
+        queries: list,
+        max_ms: float,
+        first_started: float,
+        has_plans: bool,
+        colspan: int,
+    ) -> str:
         return "".join(
-            self._row(q, i, max_ms, first_started) for i, q in enumerate(queries, 1)
+            self._row(q, i, max_ms, first_started, has_plans, colspan)
+            for i, q in enumerate(queries, 1)
         )
 
-    def _row(self, q, idx: int, max_ms: float, first_started: float) -> str:
+    def _row(
+        self,
+        q,
+        idx: int,
+        max_ms: float,
+        first_started: float,
+        has_plans: bool,
+        colspan: int,
+    ) -> str:
         dc = _dc(q.duration_ms)
         op = q.operation
         filter_op = op if op in ("SELECT", "INSERT", "UPDATE", "DELETE") else "other"
@@ -412,9 +445,22 @@ class HtmlRenderer:
                 f"</span>"
             )
 
+        plan_sort = ""
+        plan_cell = ""
+        if has_plans:
+            if q.explain_plan is not None:
+                type_key, label = _classify_plan(q.explain_plan)
+                plan_sort = _PLAN_SORT.get(type_key, "4")
+                plan_cell = (
+                    f'<td><span class="plan-badge {type_key}">{label}</span></td>'
+                )
+            else:
+                plan_cell = "<td></td>"
+
         main_row = (
             f'<tr class="qrow" data-id="{idx}" data-op="{filter_op}"'
-            f' data-started="{offset_ms:.4f}" data-dur="{q.duration_ms:.4f}" data-cs="{_html.escape(cs_sort)}"'
+            f' data-started="{offset_ms:.4f}" data-dur="{q.duration_ms:.4f}"'
+            f' data-cs="{_html.escape(cs_sort)}" data-plan="{plan_sort}"'
             f' onclick="toggleRow({idx})">'
             f'<td class="td-n">{idx}</td>'
             f'<td><span class="started">+{offset_ms:.2f}ms</span></td>'
@@ -423,15 +469,16 @@ class HtmlRenderer:
             f'<span class="dur {dc}">{q.duration_ms:.2f}ms</span>'
             f"</div></td>"
             f'<td><span class="op {_op_cls(op)}">{op}</span></td>'
+            f"{plan_cell}"
             f'<td><span class="chev">&#9658;</span>'
             f'<span class="sql-pre {sql_cls}">{sql_short}</span></td>'
             f"<td>{cs_html}</td>"
             f"</tr>"
         )
 
-        return main_row + self._detail(q, idx)
+        return main_row + self._detail(q, idx, colspan)
 
-    def _detail(self, q, idx: int) -> str:
+    def _detail(self, q, idx: int, colspan: int = 6) -> str:
         err_html = ""
         if q.error:
             err_html = f'<div class="err-badge">{_html.escape(q.error)}</div>'
@@ -453,7 +500,7 @@ class HtmlRenderer:
 
         return (
             f'<tr class="detail hidden" id="det-{idx}">'
-            f'<td colspan="6"><div class="det-inner">'
+            f'<td colspan="{colspan}"><div class="det-inner">'
             f"{err_html}<pre>{_hl(q.statement)}</pre>{params_html}{explain_html}{stk_html}"
             f"</div></td></tr>"
         )
