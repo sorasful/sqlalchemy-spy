@@ -89,12 +89,17 @@ def _classify_plan(plan: list[str]) -> tuple[str, str]:
         upper = line.upper()
         is_index_line = (
             "USING INDEX" in upper
+            or "COVERING INDEX" in upper
+            or "PRIMARY KEY" in upper
             or "INDEX SCAN" in upper
             or "INDEX ONLY SCAN" in upper
             or "BITMAP INDEX SCAN" in upper
         )
         is_scan_line = (
-            "SCAN" in upper and "INDEX" not in upper and "USING" not in upper
+            "SCAN" in upper
+            and "INDEX" not in upper
+            and "COVERING" not in upper
+            and "USING" not in upper
         ) or "SEQ SCAN" in upper
         if is_index_line:
             paren = line[line.index("(") :] if "(" in line else ""
@@ -116,22 +121,78 @@ _PLAN_SORT: dict[str, str] = {
     "plan": "4",
 }
 
+# (prefix_to_match_uppercased, css_class) — first match wins
+_NODE_RULES: list[tuple[str, str]] = [
+    # PostgreSQL
+    ("SEQ SCAN", "np-scan"),
+    ("INDEX ONLY SCAN", "np-idxo"),
+    ("BITMAP INDEX SCAN", "np-comp"),
+    ("BITMAP HEAP SCAN", "np-comp"),
+    ("INDEX SCAN", "np-idx"),
+    ("NESTED LOOP", "np-join"),
+    ("HASH JOIN", "np-join"),
+    ("MERGE JOIN", "np-join"),
+    ("SORT", "np-sort"),
+    ("AGGREGATE", "np-dim"),
+    ("HASH", "np-dim"),
+    # SQLite
+    ("SEARCH", "np-idx"),  # handled separately in _plan_line_cls for composite
+    ("SCAN", "np-scan"),
+    ("USE TEMP B-TREE", "np-sort"),
+    ("CO-ROUTINE", "np-dim"),
+    ("SCALAR SUBQUERY", "np-dim"),
+    ("CORRELATED SCALAR", "np-dim"),
+    ("MATERIALIZE", "np-dim"),
+    ("MULTI-INDEX", "np-comp"),
+]
+
+_PLAN_COST_RE = re.compile(r"(\([^)]*(?:cost|time)=[^)]+\))", re.IGNORECASE)
+
+
+def _plan_line_cls(line: str) -> str:
+    upper = line.strip().lstrip("-> ").upper()
+    if upper.startswith("SEARCH"):
+        # Covering index = SQLite's Index Only Scan (no heap fetch needed)
+        if "COVERING INDEX" in upper:
+            paren = upper[upper.index("(") :] if "(" in upper else ""
+            return "np-comp" if " AND " in paren else "np-idxo"
+        # Regular index — composite if multiple predicates in parens
+        if "USING INDEX" in upper:
+            paren = upper[upper.index("(") :] if "(" in upper else ""
+            return "np-comp" if " AND " in paren else "np-idx"
+        # Primary key lookup
+        if "INTEGER PRIMARY KEY" in upper or "PRIMARY KEY" in upper:
+            return "np-idxo"
+    for prefix, cls in _NODE_RULES:
+        if upper.startswith(prefix):
+            return cls
+    return "np-dim"
+
+
+def _fmt_plan_line(line: str) -> str:
+    cls = _plan_line_cls(line)
+    escaped = _PLAN_COST_RE.sub(
+        r'<span class="plan-cost">\1</span>',
+        _html.escape(line),
+    )
+    return f'<div class="plan-line {cls}">{escaped}</div>'
+
 
 def _fmt_explain(plan: list[str] | None, plan_id: str = "x") -> str:
-    """Return an HTML snippet showing the EXPLAIN plan badge + collapsible raw lines."""
+    """Return an HTML snippet showing the EXPLAIN plan badge + collapsible detail."""
     if not plan:
         return ""
     type_key, label = _classify_plan(plan)
-    rows = "".join(
-        f'<div class="explain-row">{_html.escape(line)}</div>' for line in plan
-    )
+    lines_html = "".join(_fmt_plan_line(line) for line in plan)
     eid = f"eplan-{plan_id}"
     return (
         f'<div class="explain-wrap">'
         f'<span class="explain-lbl">Execution plan</span>'
         f'<span class="plan-badge {type_key}">{label}</span>'
         f'<button class="plan-tog" onclick="togglePlan(\'{eid}\',this)">details ▾</button>'
-        f'<div class="explain" id="{eid}">{rows}</div>'
+        f'<div class="explain" id="{eid}">'
+        f'<div class="plan-tree">{lines_html}</div>'
+        f"</div>"
         f"</div>"
     )
 
@@ -162,7 +223,7 @@ td{padding:9px 12px;vertical-align:middle}
 .td-n{color:#8b949e;font-size:12px;font-family:monospace;width:36px}
 .dur-cell{white-space:nowrap;width:130px}
 .dur-bar-w{display:flex;align-items:center;gap:8px}
-.dur-bar{flex-shrink:0;height:4px;border-radius:2px;width:var(--pct,0%);max-width:50px;min-width:2px;opacity:.65}
+.dur-bar{flex-shrink:0;height:4px;border-radius:2px;min-width:2px;opacity:.65}
 .dur-bar.green{background:#3fb950}.dur-bar.yellow{background:#d29922}.dur-bar.red{background:#f85149}
 .dur{font-family:'SF Mono','Fira Code',ui-monospace,monospace;font-size:12px;font-weight:600}
 .dur.green{color:#3fb950}.dur.yellow{color:#d29922}.dur.red{color:#f85149}
@@ -172,7 +233,8 @@ td{padding:9px 12px;vertical-align:middle}
 .op-UPDATE{background:rgba(210,153,34,.15);color:#d29922}
 .op-DELETE{background:rgba(248,81,73,.15);color:#f85149}
 .op-other{background:rgba(139,148,158,.15);color:#8b949e}
-.sql-pre{font-family:'SF Mono','Fira Code',ui-monospace,monospace;font-size:12px;color:#c9d1d9;max-width:430px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sql-cell{display:flex;align-items:center;gap:4px;min-width:0}
+.sql-pre{font-family:'SF Mono','Fira Code',ui-monospace,monospace;font-size:12px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .sql-pre.err{color:#f85149}
 .cs{font-family:'SF Mono','Fira Code',ui-monospace,monospace;font-size:11px;white-space:nowrap}
 .cs-file{color:#58a6ff}.cs-fn{color:#d2a8ff}.cs-dim{color:#8b949e}
@@ -212,15 +274,19 @@ th.sortable.desc .sort-ind::after{content:' \u25bc'}
 .p-key{color:#d2a8ff;flex-shrink:0}.p-eq{color:#8b949e;flex-shrink:0}.p-val{color:#e6edf3;word-break:break-all}
 .explain-wrap{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .explain-lbl{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.7px}
-.plan-badge{padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700;letter-spacing:.4px}
+.plan-badge{padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700;letter-spacing:.4px;white-space:nowrap}
 .plan-badge.full-scan{background:rgba(210,153,34,.18);border:1px solid rgba(210,153,34,.4);color:#d29922}
 .plan-badge.index{background:rgba(63,185,80,.18);border:1px solid rgba(63,185,80,.4);color:#3fb950}
 .plan-badge.composite-index{background:rgba(88,166,255,.18);border:1px solid rgba(88,166,255,.4);color:#58a6ff}
 .plan-badge.plan{background:rgba(139,148,158,.18);border:1px solid rgba(139,148,158,.35);color:#8b949e}
 .plan-tog{background:none;border:none;color:#58a6ff;font-size:11px;cursor:pointer;padding:0;font-family:inherit}
 .plan-tog:hover{text-decoration:underline}
-.explain{display:none;width:100%;margin-top:4px;font-family:'SF Mono','Fira Code',ui-monospace,monospace;font-size:12px}
-.explain-row{padding:2px 0;color:#c9d1d9}
+.explain{display:none;width:100%;margin-top:6px}
+.plan-tree{font-family:'SF Mono','Fira Code',ui-monospace,monospace;font-size:12px;margin-bottom:6px}
+.plan-line{padding:1px 0;white-space:pre-wrap;word-break:break-all}
+.np-scan{color:#d29922}.np-idx{color:#3fb950}.np-idxo{color:#56d364}
+.np-comp{color:#58a6ff}.np-join{color:#d2a8ff}.np-sort{color:#79c0ff}.np-dim{color:#8b949e}
+.plan-cost{color:#6e7681;font-size:11px}
 .hidden{display:none!important}
 """
 
@@ -425,6 +491,7 @@ class HtmlRenderer:
         op = q.operation
         filter_op = op if op in ("SELECT", "INSERT", "UPDATE", "DELETE") else "other"
         pct = (q.duration_ms / max_ms * 100) if max_ms > 0 else 0.0
+        bar_px = round(min(pct * 0.5, 50))
         offset_ms = (q.started_at - first_started) * 1000
 
         sql_short = _html.escape(q.statement.strip().replace("\n", " ")[:80])
@@ -465,13 +532,15 @@ class HtmlRenderer:
             f'<td class="td-n">{idx}</td>'
             f'<td><span class="started">+{offset_ms:.2f}ms</span></td>'
             f'<td class="dur-cell"><div class="dur-bar-w">'
-            f'<span class="dur-bar {dc}" style="--pct:{pct:.1f}%"></span>'
+            f'<span class="dur-bar {dc}" style="width:{bar_px}px"></span>'
             f'<span class="dur {dc}">{q.duration_ms:.2f}ms</span>'
             f"</div></td>"
             f'<td><span class="op {_op_cls(op)}">{op}</span></td>'
             f"{plan_cell}"
-            f'<td><span class="chev">&#9658;</span>'
-            f'<span class="sql-pre {sql_cls}">{sql_short}</span></td>'
+            f'<td><div class="sql-cell">'
+            f'<span class="chev">&#9658;</span>'
+            f'<span class="sql-pre {sql_cls}">{sql_short}</span>'
+            f"</div></td>"
             f"<td>{cs_html}</td>"
             f"</tr>"
         )

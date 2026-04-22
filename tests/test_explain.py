@@ -242,7 +242,7 @@ class TestHtmlRendererExplain:
 
         html = HtmlRenderer().render(p)
         assert "Execution plan" in html
-        assert "explain-row" in html
+        assert "plan-tree" in html
 
     def test_html_no_explain_when_disabled(self, engine):
         with Profiler(engine, explain=False) as p:
