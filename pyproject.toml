@@ -1,6 +1,6 @@
 [project]
 name = "sqlalchemy-spy"
-version = "0.2.0"
+version = "0.3.0"
 description = "Minimal SQLAlchemy query profiler - zero dependencies beyond SQLAlchemy"
 readme = "README.md"
 authors = [
