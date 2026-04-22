@@ -22,6 +22,8 @@ dev = [
     "ty>=0.0.29",
     "aiosqlite>=0.22.1",
     "greenlet>=3.4.0",
+    "psycopg2-binary>=2.9.12",
+    "asyncpg>=0.31.0",
 ]
 
 [tool.pytest.ini_options]

@@ -95,17 +95,22 @@ def _classify_plan(plan: list[str]) -> tuple[str, str]:
             or "INDEX ONLY SCAN" in upper
             or "BITMAP INDEX SCAN" in upper
         )
-        is_scan_line = (
+        is_scan_line = "SEQ SCAN" in upper or (
             "SCAN" in upper
             and "INDEX" not in upper
             and "COVERING" not in upper
             and "USING" not in upper
-        ) or "SEQ SCAN" in upper
+            and "BITMAP" not in upper
+            and "HEAP" not in upper
+        )
         if is_index_line:
             paren = line[line.index("(") :] if "(" in line else ""
             if " AND " in paren.upper():
                 return "composite-index", "Composite Index"
             has_index = True
+        # PostgreSQL: "  Index Cond: ((col1 = $1) AND (col2 = $2))"
+        if "INDEX COND:" in upper and " AND " in upper:
+            return "composite-index", "Composite Index"
         if is_scan_line:
             return "full-scan", "Full Scan"
     if has_index:
