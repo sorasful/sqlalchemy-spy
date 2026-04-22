@@ -82,6 +82,52 @@ def _fmt_params(params) -> str:
     return f'<div class="params-lbl">Parameters</div><div class="params">{rows}</div>'
 
 
+def _classify_plan(plan: list[str]) -> tuple[str, str]:
+    """Return (css_key, label) summarising the dominant access type in the plan."""
+    has_index = False
+    for line in plan:
+        upper = line.upper()
+        is_index_line = (
+            "USING INDEX" in upper
+            or "INDEX SCAN" in upper
+            or "INDEX ONLY SCAN" in upper
+            or "BITMAP INDEX SCAN" in upper
+        )
+        is_scan_line = (
+            "SCAN" in upper and "INDEX" not in upper and "USING" not in upper
+        ) or "SEQ SCAN" in upper
+        if is_index_line:
+            # Composite = multiple column predicates inside the parentheses
+            paren = line[line.index("(") :] if "(" in line else ""
+            if " AND " in paren.upper():
+                return "composite-index", "Composite Index"
+            has_index = True
+        if is_scan_line:
+            return "full-scan", "Full Scan"
+    if has_index:
+        return "index", "Index"
+    return "plan", "Plan"
+
+
+def _fmt_explain(plan: list[str] | None, plan_id: str = "x") -> str:
+    """Return an HTML snippet showing the EXPLAIN plan badge + collapsible raw lines."""
+    if not plan:
+        return ""
+    type_key, label = _classify_plan(plan)
+    rows = "".join(
+        f'<div class="explain-row">{_html.escape(line)}</div>' for line in plan
+    )
+    eid = f"eplan-{plan_id}"
+    return (
+        f'<div class="explain-wrap">'
+        f'<span class="explain-lbl">Execution plan</span>'
+        f'<span class="plan-badge {type_key}">{label}</span>'
+        f'<button class="plan-tog" onclick="togglePlan(\'{eid}\',this)">details ▾</button>'
+        f'<div class="explain" id="{eid}">{rows}</div>'
+        f"</div>"
+    )
+
+
 _CSS = """\
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5}
@@ -156,6 +202,17 @@ th.sortable.desc .sort-ind::after{content:' \u25bc'}
 .params{margin-bottom:12px;font-family:'SF Mono','Fira Code',ui-monospace,monospace;font-size:12px;display:flex;flex-wrap:wrap;gap:4px 0}
 .param{width:100%;display:flex;gap:6px;align-items:baseline;padding:1px 0}
 .p-key{color:#d2a8ff;flex-shrink:0}.p-eq{color:#8b949e;flex-shrink:0}.p-val{color:#e6edf3;word-break:break-all}
+.explain-wrap{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.explain-lbl{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.7px}
+.plan-badge{padding:1px 7px;border-radius:3px;font-size:10px;font-weight:700;letter-spacing:.4px}
+.plan-badge.full-scan{background:rgba(210,153,34,.18);border:1px solid rgba(210,153,34,.4);color:#d29922}
+.plan-badge.index{background:rgba(63,185,80,.18);border:1px solid rgba(63,185,80,.4);color:#3fb950}
+.plan-badge.composite-index{background:rgba(88,166,255,.18);border:1px solid rgba(88,166,255,.4);color:#58a6ff}
+.plan-badge.plan{background:rgba(139,148,158,.18);border:1px solid rgba(139,148,158,.35);color:#8b949e}
+.plan-tog{background:none;border:none;color:#58a6ff;font-size:11px;cursor:pointer;padding:0;font-family:inherit}
+.plan-tog:hover{text-decoration:underline}
+.explain{display:none;width:100%;margin-top:4px;font-family:'SF Mono','Fira Code',ui-monospace,monospace;font-size:12px}
+.explain-row{padding:2px 0;color:#c9d1d9}
 .hidden{display:none!important}
 """
 
@@ -186,6 +243,14 @@ function toggleRow(id){
 /* ── collapse section ── */
 function toggleSec(id){
   document.getElementById(id).classList.toggle('collapsed');
+}
+/* ── explain plan toggle ── */
+function togglePlan(id,btn){
+  var el=document.getElementById(id);
+  if(!el) return;
+  var open=el.style.display==='block';
+  el.style.display=open?'none':'block';
+  btn.textContent=open?'details ▾':'details ▴';
 }
 /* ── sort ── */
 var _sort={col:'started',dir:1};
@@ -384,11 +449,12 @@ class HtmlRenderer:
                 )
 
         params_html = _fmt_params(q.params)
+        explain_html = _fmt_explain(q.explain_plan, str(idx))
 
         return (
             f'<tr class="detail hidden" id="det-{idx}">'
             f'<td colspan="6"><div class="det-inner">'
-            f"{err_html}<pre>{_hl(q.statement)}</pre>{params_html}{stk_html}"
+            f"{err_html}<pre>{_hl(q.statement)}</pre>{params_html}{explain_html}{stk_html}"
             f"</div></td></tr>"
         )
 

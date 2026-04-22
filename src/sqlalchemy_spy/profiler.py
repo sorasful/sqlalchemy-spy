@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import time
 import traceback
+import warnings
 from dataclasses import dataclass, field
 from functools import wraps
 from pathlib import Path
@@ -28,6 +29,7 @@ class QueryRecord:
     error: str | None = None
     stack: list[traceback.FrameSummary] = field(default_factory=list)
     started_at: float = field(default_factory=time.time)
+    explain_plan: list[str] | None = None
 
     @property
     def duration_ms(self) -> float:
@@ -53,6 +55,18 @@ def _to_sync_engine(engine: Engine | AsyncEngine | None) -> Engine | type[Engine
     return cast(Engine, engine)
 
 
+_EXPLAIN_SKIP = {
+    "CREATE",
+    "DROP",
+    "ALTER",
+    "BEGIN",
+    "COMMIT",
+    "ROLLBACK",
+    "PRAGMA",
+    "EXPLAIN",
+}
+
+
 class Profiler:
     def __init__(
         self,
@@ -60,10 +74,12 @@ class Profiler:
         *,
         capture_stack: bool = True,
         stack_depth: int = 8,
+        explain: bool = False,
     ):
         self.engine = _to_sync_engine(engine)
         self.capture_stack = capture_stack
         self.stack_depth = stack_depth
+        self.explain = explain
         self.queries: list[QueryRecord] = []
         self._active = False
 
@@ -99,6 +115,10 @@ class Profiler:
         self.stop()
 
     def _before_execute(self, conn, cursor, statement, params, context, executemany):
+        # skip EXPLAIN queries fired by this profiler to avoid recording them
+        if statement.strip().upper().startswith("EXPLAIN"):
+            return statement, params
+
         stack: list[traceback.FrameSummary] = []
         if self.capture_stack:
             stack = [
@@ -125,6 +145,34 @@ class Profiler:
         record = getattr(context, "_profiler_record", None)
         if record is not None:
             record.end_time = time.perf_counter()
+            if self.explain and not executemany:
+                record.explain_plan = self._run_explain(conn, statement, params)
+
+    def _run_explain(self, conn: Any, statement: str, params: Any) -> list[str]:
+        first_kw = statement.strip().split()[0].upper() if statement.strip() else ""
+        if first_kw in _EXPLAIN_SKIP:
+            return []
+        try:
+            dialect = conn.engine.dialect.name
+            if dialect == "sqlite":
+                result = conn.exec_driver_sql(
+                    f"EXPLAIN QUERY PLAN {statement}", params or []
+                )
+                return [row[3] for row in result.fetchall()]
+            elif dialect == "postgresql":
+                result = conn.exec_driver_sql(f"EXPLAIN {statement}", params or [])
+                return [row[0] for row in result.fetchall()]
+            else:
+                warnings.warn(
+                    f"sqlalchemy-spy: explain=True is not supported for dialect '{dialect}'. "
+                    "Supported dialects: sqlite (pysqlite, aiosqlite), "
+                    "postgresql (psycopg2, psycopg, asyncpg).",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                return []
+        except Exception:
+            return []
 
     def _on_error(self, context):
         record = getattr(context.execution_context, "_profiler_record", None)
@@ -165,7 +213,8 @@ def profile(engine: Engine | None = None, **kwargs: Any):
         @profile(engine)
         async def my_handler(): ...
     """
-    profiler = Profiler(engine)
+    explain = kwargs.pop("explain", False)
+    profiler = Profiler(engine, explain=explain)
 
     def decorator(func):
         if inspect.iscoroutinefunction(func):

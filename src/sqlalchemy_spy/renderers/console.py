@@ -137,6 +137,14 @@ class ConsoleRenderer:
                     f"  {' ' * 14}↳ {frame.filename}:{frame.lineno} in {frame.name}()",
                     DIM,
                 )
+            if q.explain_plan:
+                for line in q.explain_plan:
+                    upper = line.upper()
+                    is_scan = (
+                        "SCAN TABLE" in upper and "INDEX" not in upper
+                    ) or "SEQ SCAN" in upper
+                    color = YELLOW if is_scan else GREEN
+                    _print(f"  {' ' * 14}  {line}", color)
 
     def _print_hot_paths(self, groups: dict[_CallSiteKey, list[QueryRecord]]) -> None:
         print()

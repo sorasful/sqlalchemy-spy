@@ -67,6 +67,23 @@ with Profiler(engine) as prof:
     ...
 ```
 
+### Execution plans
+
+Pass `explain=True` to capture the query execution plan for each statement:
+
+```python
+with Profiler(engine, explain=True) as prof:
+    run_queries()
+
+prof.print_stats()
+```
+
+The console renderer shows the plan under each slow query (yellow for full scans, green for index usage). The HTML renderer shows a badge (`Full Scan`, `Index`, `Composite Index`) with a collapsible raw plan.
+
+**Supported dialects:** SQLite (`pysqlite`, `aiosqlite`) and PostgreSQL (`psycopg2`, `psycopg`, `asyncpg`). Other dialects emit a `UserWarning` and skip the plan.
+
+**Overhead:** `EXPLAIN` runs one extra query per recorded statement. Because it only asks the query planner for a plan — without actually executing the query — the added cost is small (typically under 1ms per query). That said, it is a real database round-trip, so keep `explain=False` (the default) in any performance benchmark or tight loop.
+
 `AsyncEngine` is accepted directly:
 
 ```python
@@ -116,6 +133,7 @@ Each `QueryRecord` has:
 | `operation` | `str` | First SQL keyword (`SELECT`, `INSERT`, …) |
 | `error` | `str \| None` | Exception message if the query failed |
 | `stack` | `list[FrameSummary]` | Filtered call stack |
+| `explain_plan` | `list[str] \| None` | Query execution plan lines, `None` if `explain=False` |
 
 ### FastAPI middleware
 
@@ -185,7 +203,7 @@ SQLAlchemy exposes an [event system](https://docs.sqlalchemy.org/en/20/core/even
 | Event | Purpose |
 |---|---|
 | `before_cursor_execute` | start timer, snapshot the call stack |
-| `after_cursor_execute` | stop timer |
+| `after_cursor_execute` | stop timer; run `EXPLAIN` if `explain=True` |
 | `handle_error` | record the error, stop timer |
 
 The call stack is filtered to remove SQLAlchemy's own frames (matched by the installed package path) and dynamic frames, leaving only user code. The last remaining frame is the line that triggered the query.

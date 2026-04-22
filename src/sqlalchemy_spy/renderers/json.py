@@ -40,6 +40,7 @@ class JsonRenderer:
                     "duration_ms": round(q.duration_ms, 4),
                     "error": q.error,
                     "call_site": call_site,
+                    "explain_plan": q.explain_plan,
                 }
             )
 
